@@ -32,8 +32,7 @@ function sortNodes(nodes: FileNode[]): FileNode[] {
 
 /* ---------------------------------- Tree --------------------------------- */
 
-export function TreeView({
-  tree,
+export function TreeView({ tree,
   selected,
   onSelect,
 }: {
@@ -42,7 +41,7 @@ export function TreeView({
   onSelect: (path: string) => void;
 }) {
   return (
-    <div className="py-1 text-sm">
+    <div className="py-1.5 text-sm">
       {sortNodes(tree).map((node) => (
         <TreeNode
           key={node.name}
@@ -82,7 +81,7 @@ function TreeNode({
           if (isFolder) setOpen((v) => !v);
         }}
         className={cn(
-          "group flex w-full items-center gap-1.5 py-1 pr-2 text-left transition-colors hover:bg-muted/60",
+          "group flex w-full items-center gap-2 py-1.5 pr-2 text-left transition-colors hover:bg-muted/60",
           isSelected && "bg-primary/15 hover:bg-primary/15"
         )}
         style={{ paddingLeft: depth * 16 + 8 }}
@@ -90,12 +89,12 @@ function TreeNode({
         {isFolder ? (
           <ChevronRight
             className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform",
+              "size-4 shrink-0 text-muted-foreground transition-transform",
               open && "rotate-90"
             )}
           />
         ) : (
-          <span className="w-3.5 shrink-0" />
+          <span className="w-4 shrink-0" />
         )}
         {isFolder ? <FolderIcon open={open} /> : <FileIcon name={node.name} />}
         <span className="truncate">{node.name}</span>
@@ -175,7 +174,7 @@ export function ListView({
 }) {
   return (
     <div className="text-sm">
-      <div className="sticky top-0 flex items-center gap-3 border-b bg-card/95 px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
+      <div className="sticky top-0 flex items-center gap-3 border-b bg-card/95 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
         <div className="flex-1">Name</div>
         <div className="w-24">Size</div>
         <div className="w-28">Kind</div>
@@ -189,7 +188,7 @@ export function ListView({
             node.type === "folder" && onOpenDir(node.name)
           }
           className={cn(
-            "flex w-full items-center gap-3 border-b border-border/40 px-4 py-1.5 text-left transition-colors",
+            "flex w-full items-center gap-3 border-b border-border/40 px-4 py-2 text-left transition-colors",
             selected === node.name ? "bg-primary/15" : "hover:bg-muted/40"
           )}
         >

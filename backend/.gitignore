@@ -1,0 +1,13 @@
+# Terraform state
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfstate.d/
+
+# Build artifacts
+.build/
+
+# Sensitive var files
+*.tfvars
+*.tfvars.json

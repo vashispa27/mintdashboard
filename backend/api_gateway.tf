@@ -1,0 +1,60 @@
+resource "aws_apigatewayv2_api" "mint_api" {
+  name          = "mint-dashboard-api"
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_headers = ["Content-Type"]
+    max_age       = 300
+  }
+}
+
+resource "aws_apigatewayv2_stage" "prod" {
+  api_id      = aws_apigatewayv2_api.mint_api.id
+  name        = "prod"
+  auto_deploy = true
+}
+
+# ── Integrations ──────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "get_repos" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.get_repos.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "get_repo_metadata" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.get_repo_metadata.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "get_file_content" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.get_file_content.invoke_arn
+  payload_format_version = "2.0"
+}
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "get_repos" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /repos"
+  target    = "integrations/${aws_apigatewayv2_integration.get_repos.id}"
+}
+
+resource "aws_apigatewayv2_route" "get_repo_metadata" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /repos/{repoId}/tree"
+  target    = "integrations/${aws_apigatewayv2_integration.get_repo_metadata.id}"
+}
+
+resource "aws_apigatewayv2_route" "get_file_content" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /repos/{repoId}/file"
+  target    = "integrations/${aws_apigatewayv2_integration.get_file_content.id}"
+}

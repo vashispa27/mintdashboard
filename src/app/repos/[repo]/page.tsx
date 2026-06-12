@@ -16,6 +16,7 @@ import {
   GitBranch,
   Loader2,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +64,7 @@ export default function RepoViewerPage() {
   const [cwd, setCwd] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -74,7 +76,7 @@ export default function RepoViewerPage() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [repoId]);
+  }, [repoId, refreshKey]);
 
   const activeView = VIEW_OPTIONS.find((v) => v.mode === view)!;
   const dirNodes = resolveDir(tree, cwd);
@@ -184,6 +186,16 @@ export default function RepoViewerPage() {
 
           {/* Right actions */}
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2"
+              onClick={() => setRefreshKey((k) => k + 1)}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+              Refresh
+            </Button>
             <Button variant="ghost" size="sm" className="gap-2">
               <GitCommit className="size-4" />
               Commits

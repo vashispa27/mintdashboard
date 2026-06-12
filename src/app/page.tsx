@@ -1,269 +1,159 @@
 "use client";
 
-import { useState } from "react";
-import { Maximize2, Sparkles, Radio, Box, ChevronRight, Copy, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { I } from "@/components/sentinel/icons";
+import { HarnessMark, StatusPill } from "@/components/sentinel/shared";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { MOCK_LOGS, LOG_LEVEL_META, type LogEntry } from "@/lib/telemetry";
+  SESSIONS,
+  HARNESSES,
+  NOW,
+  fmtDur,
+  fmtAgo,
+  type Session,
+} from "@/lib/agents-data";
 
-const TIME_WINDOWS = [1, 5, 10, 25] as const;
+const FILTERS: { k: string; label: string }[] = [
+  { k: "all", label: "All" },
+  { k: "running", label: "Running" },
+  { k: "completed", label: "Completed" },
+  { k: "failed", label: "Failed" },
+  { k: "queued", label: "Queued" },
+  { k: "timeout", label: "Timed out" },
+];
 
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }) + "." + String(d.getMilliseconds()).padStart(3, "0");
-}
+export default function AgentsPage() {
+  const all = SESSIONS;
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [now, setNow] = useState(NOW);
 
-export default function Home() {
-  const [session, setSession] = useState("sess-01");
-  const [harness, setHarness] = useState("claude-code");
-  const [logType, setLogType] = useState("all");
-  const [timeWindow, setTimeWindow] = useState<number>(5);
-  const [live, setLive] = useState(true);
+  // advance the (mock) clock after mount so "ago" + running durations feel live
+  useEffect(() => {
+    const mounted = Date.now();
+    const t = setInterval(() => setNow(NOW + (Date.now() - mounted)), 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {
+      all: all.length, running: 0, completed: 0, failed: 0, queued: 0, timeout: 0,
+    };
+    all.forEach((s) => c[s.status]++);
+    return c;
+  }, [all]);
+
+  const list = useMemo(() => {
+    return all.filter((s) => {
+      if (filter !== "all" && s.status !== filter) return false;
+      if (q) {
+        const hay = (s.id + " " + s.repo + " " + s.task + " " + HARNESSES[s.harness].label).toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [all, filter, q]);
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      {/* App header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b px-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Box className="size-4" />
-          </div>
-          <div className="flex items-center gap-1.5 text-sm">
-            <span className="font-semibold">Telemetry</span>
-            <ChevronRight className="size-3.5 text-muted-foreground" />
-            <span className="font-mono text-xs text-muted-foreground">
-              sandbox_a91f4c
-            </span>
-          </div>
+    <div className="main">
+      <div className="topbar">
+        <h1>Agents</h1>
+        <span className="topbar-sub">{counts.running} running · {all.length} total</span>
+        <div style={{ flex: 1 }}></div>
+        <div className="input" style={{ width: 260 }}>
+          <I.search size={15} />
+          <input
+            placeholder="Search sessions, repos, tasks…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-            </span>
-            <span className="text-muted-foreground">3 sessions active</span>
-          </span>
-        </div>
-      </header>
-
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b px-5 py-3">
-        <div className="flex flex-wrap items-end gap-4">
-          <Field label="Session">
-            <Select value={session} onValueChange={(v) => setSession(v ?? "")}>
-              <SelectTrigger className="h-8 w-[190px] font-mono text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sess-01">sess-01 · running</SelectItem>
-                <SelectItem value="sess-02">sess-02 · running</SelectItem>
-                <SelectItem value="sess-03">sess-03 · stopped</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label="Harness">
-            <Select value={harness} onValueChange={(v) => setHarness(v ?? "")}>
-              <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="claude-code">Claude Code</SelectItem>
-                <SelectItem value="codex">Codex</SelectItem>
-                <SelectItem value="custom-agent">Custom Agent</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label="Log type">
-            <Select value={logType} onValueChange={(v) => setLogType(v ?? "")}>
-              <SelectTrigger className="h-8 w-[150px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="tool">Tool call</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-
-        <div className="flex items-end gap-3">
-          <Field label="Window">
-            <div className="flex h-8 items-center rounded-md border bg-card p-0.5">
-              {TIME_WINDOWS.map((w) => (
-                <button
-                  key={w}
-                  onClick={() => setTimeWindow(w)}
-                  className={cn(
-                    "h-7 rounded px-2.5 text-xs font-medium transition-colors",
-                    timeWindow === w
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {w}m
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Button
-            variant={live ? "default" : "outline"}
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={() => setLive((v) => !v)}
-          >
-            <Radio className="size-3.5" />
-            {live ? "Live" : "Paused"}
-          </Button>
-
-          <Button variant="outline" size="sm" className="h-8 gap-1.5">
-            <Sparkles className="size-3.5" />
-            Insights
-          </Button>
-        </div>
+        <button className="icon-btn" title="Refresh"><I.refresh size={16} /></button>
+        <button className="btn primary sm"><I.activity size={14} />New run</button>
       </div>
 
-      {/* Log table */}
-      <div className="flex min-h-0 flex-1 flex-col">
-        {/* Column header */}
-        <div className="flex items-center gap-3 border-b bg-card/40 px-5 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          <div className="w-4" />
-          <div className="w-20">Type</div>
-          <div className="flex-1">Summary</div>
-          <div className="w-32 text-right">Timestamp</div>
-          <button className="text-muted-foreground transition-colors hover:text-foreground">
-            <Maximize2 className="size-3.5" />
-          </button>
-        </div>
-
-        {/* Rows */}
-        <ScrollArea className="flex-1">
-          <div className="divide-y divide-border/50">
-            {MOCK_LOGS.map((log) => (
-              <LogRow key={log.id} log={log} />
+      <div className="scroll">
+        <div className="agents-wrap">
+          <div className="seg">
+            {FILTERS.map((f) => (
+              <button
+                key={f.k}
+                className={"seg-btn" + (filter === f.k ? " on" : "")}
+                onClick={() => setFilter(f.k)}
+              >
+                {f.k !== "all" && <span className={"dot " + f.k} style={{ animation: "none" }}></span>}
+                {f.label}
+                <span className="seg-count">{counts[f.k]}</span>
+              </button>
             ))}
           </div>
-        </ScrollArea>
 
-        {/* Status bar */}
-        <div className="flex h-7 shrink-0 items-center justify-between border-t bg-card/40 px-5 text-[11px] text-muted-foreground">
-          <span className="font-mono">{MOCK_LOGS.length} events</span>
-          <span className="font-mono">
-            tail -f /sandbox/sess-01/claude-code.jsonl
-          </span>
+          <div className="card-grid">
+            {list.map((s) => (
+              <AgentCard key={s.id} s={s} now={now} />
+            ))}
+          </div>
+          {list.length === 0 && (
+            <div className="empty" style={{ padding: "80px 0" }}>
+              <I.search size={30} />
+              <div>No sessions match &quot;<b>{q}</b>&quot;</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function LogRow({ log }: { log: LogEntry }) {
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const meta = LOG_LEVEL_META[log.level];
-  const json = JSON.stringify(log.raw, null, 2);
-
-  const copy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await navigator.clipboard.writeText(json);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  };
+function AgentCard({ s, now }: { s: Session; now: number }) {
+  const router = useRouter();
+  const h = HARNESSES[s.harness];
+  const live = s.status === "running";
+  const dur = live ? now - s.startedAt : s.duration;
+  const pctTimeout = s.timeout ? Math.min(100, (dur / 1000 / s.timeout) * 100) : null;
 
   return (
-    <div className={cn(open && "bg-muted/30")}>
-      {/* Summary row */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-center gap-3 px-5 py-2 text-left text-sm transition-colors hover:bg-muted/40"
-      >
-        <ChevronRight
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        <div className="w-20">
-          <Badge
-            variant="outline"
-            className={cn("font-mono text-[10px]", meta.className)}
-          >
-            {meta.label}
-          </Badge>
-        </div>
-        <div className="flex-1 truncate font-mono text-xs text-foreground/90">
-          {log.summary}
-        </div>
-        <div className="w-32 text-right font-mono text-xs tabular-nums text-muted-foreground">
-          {formatTime(log.timestamp)}
-        </div>
-        <div className="w-3.5" />
-      </button>
-
-      {/* Expanded detail */}
-      {open && (
-        <div className="px-5 pb-3 pl-12">
-          <div className="relative rounded-md border bg-background">
-            <div className="flex items-center justify-between border-b px-3 py-1.5">
-              <span className="font-mono text-[11px] text-muted-foreground">
-                raw event · {String(log.raw.type ?? "unknown")}
-              </span>
-              <button
-                onClick={copy}
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                {copied ? (
-                  <Check className="size-3" />
-                ) : (
-                  <Copy className="size-3" />
-                )}
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed text-foreground/90">
-              {json}
-            </pre>
+    <button className={"agent-card" + (live ? " live" : "")} onClick={() => router.push(`/sessions/${s.id}`)}>
+      <div className="ac-top">
+        <HarnessMark hk={s.harness} size={28} />
+        <div className="ac-head">
+          <div className="ac-repo">
+            {s.repo}
+            <span className="ac-branch mono">{s.branch}</span>
           </div>
+          <div className="ac-id mono">{s.id}</div>
+        </div>
+        <StatusPill status={s.status} />
+      </div>
+
+      <div className="ac-task">{s.task}</div>
+
+      <div className="ac-meta">
+        <span className="ac-chip"><I.clock size={13} />{s.status === "queued" ? "queued" : fmtDur(dur)}</span>
+        <span className="ac-chip"><I.wrench size={13} />{s.toolCalls} calls</span>
+        <span className="ac-chip"><I.coin size={13} />${s.cost.toFixed(2)}</span>
+        {s.exitCode !== null && (
+          <span className={"ac-chip" + (s.exitCode === 0 ? " ok" : " bad")}>exit {s.exitCode}</span>
+        )}
+      </div>
+
+      <div className="ac-foot">
+        <span className="harness" style={{ fontSize: 12 }}>
+          {h.label}
+          <span className="mono" style={{ color: "var(--text-4)" }}> · {h.model}</span>
+        </span>
+        <span style={{ flex: 1 }}></span>
+        <span style={{ color: "var(--text-3)", fontSize: 12 }}>{fmtAgo(s.startedAt, now)}</span>
+      </div>
+
+      {live && (
+        <div
+          className="ac-progress"
+          title={s.timeout ? `${Math.round(pctTimeout!)}% of ${fmtDur(s.timeout * 1000)} timeout` : "running"}
+        >
+          <div className="ac-progress-bar" style={{ width: (pctTimeout != null ? pctTimeout : 30) + "%" }}></div>
         </div>
       )}
-    </div>
+    </button>
   );
 }

@@ -54,10 +54,21 @@ export default function AgentsPage() {
         try {
           const msg = JSON.parse(payload.toString());
           if (msg.type === "session.start") {
-            // new session arrived — add to top of list
             setAll((prev) => {
               if (prev.find((s) => s.id === msg.sessionId)) return prev;
-              return [msg as unknown as Session, ...prev];
+              const session = {
+                ...msg,
+                id: msg.sessionId,
+                status: "running",
+                exitCode: null,
+                cost: 0,
+                toolCalls: 0,
+                tokensIn: 0,
+                tokensOut: 0,
+                cpu: 0,
+                mem: 0,
+              } as unknown as Session;
+              return [session, ...prev];
             });
           } else if (msg.type === "session.update") {
             setAll((prev) =>
@@ -167,9 +178,9 @@ function AgentCard({ s, now }: { s: Session; now: number }) {
 
       <div className="ac-meta">
         <span className="ac-chip"><I.clock size={13} />{s.status === "queued" ? "queued" : fmtDur(dur)}</span>
-        <span className="ac-chip"><I.wrench size={13} />{s.toolCalls} calls</span>
-        <span className="ac-chip"><I.coin size={13} />${s.cost.toFixed(2)}</span>
-        {s.exitCode !== null && (
+        <span className="ac-chip"><I.wrench size={13} />{s.toolCalls ?? 0} calls</span>
+        <span className="ac-chip"><I.coin size={13} />${(s.cost ?? 0).toFixed(2)}</span>
+        {s.exitCode != null && (
           <span className={"ac-chip" + (s.exitCode === 0 ? " ok" : " bad")}>exit {s.exitCode}</span>
         )}
       </div>

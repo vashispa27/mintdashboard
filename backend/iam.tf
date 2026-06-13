@@ -29,3 +29,17 @@ resource "aws_iam_role_policy" "s3_access" {
     }]
   })
 }
+
+resource "aws_iam_role_policy" "dynamodb_access" {
+  name = "mint-dynamodb-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
+      Resource = [aws_dynamodb_table.sessions.arn, aws_dynamodb_table.users.arn]
+    }]
+  })
+}

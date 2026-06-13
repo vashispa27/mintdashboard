@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { I } from "@/components/sentinel/icons";
 import { HarnessMark, StatusPill } from "@/components/sentinel/shared";
 import {
-  SESSIONS,
   HARNESSES,
   NOW,
   fmtDur,
   fmtAgo,
   type Session,
 } from "@/lib/agents-data";
+import { fetchSessions } from "@/lib/api";
+import { getIoTClient, allSessionsTopic } from "@/lib/iot";
 
 const FILTERS: { k: string; label: string }[] = [
   { k: "all", label: "All" },
@@ -23,16 +24,52 @@ const FILTERS: { k: string; label: string }[] = [
 ];
 
 export default function AgentsPage() {
-  const all = SESSIONS;
+  const [all, setAll] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
-  const [now, setNow] = useState(NOW);
+  const [now, setNow] = useState(Date.now());
 
-  // advance the (mock) clock after mount so "ago" + running durations feel live
+  const refresh = () => {
+    setLoading(true);
+    fetchSessions().then(setAll).finally(() => setLoading(false));
+  };
+
+  // initial load
+  useEffect(() => { refresh(); }, []);
+
+  // live clock for running durations
   useEffect(() => {
-    const mounted = Date.now();
-    const t = setInterval(() => setNow(NOW + (Date.now() - mounted)), 2000);
+    const t = setInterval(() => setNow(Date.now()), 2000);
     return () => clearInterval(t);
+  }, []);
+
+  // IoT live patches
+  useEffect(() => {
+    let unsub = false;
+    getIoTClient().then((client) => {
+      if (unsub) return;
+      client.subscribe(allSessionsTopic());
+      client.on("message", (_topic, payload) => {
+        try {
+          const msg = JSON.parse(payload.toString());
+          if (msg.type === "session.start") {
+            // new session arrived — add to top of list
+            setAll((prev) => {
+              if (prev.find((s) => s.id === msg.sessionId)) return prev;
+              return [msg as unknown as Session, ...prev];
+            });
+          } else if (msg.type === "session.update") {
+            setAll((prev) =>
+              prev.map((s) =>
+                s.id === msg.sessionId ? { ...s, ...msg } : s
+              )
+            );
+          }
+        } catch { /* ignore malformed */ }
+      });
+    });
+    return () => { unsub = true; };
   }, []);
 
   const counts = useMemo(() => {
@@ -58,7 +95,7 @@ export default function AgentsPage() {
     <div className="main">
       <div className="topbar">
         <h1>Agents</h1>
-        <span className="topbar-sub">{counts.running} running · {all.length} total</span>
+        <span className="topbar-sub">{loading ? "…" : `${counts.running} running · ${all.length} total`}</span>
         <div style={{ flex: 1 }}></div>
         <div className="input" style={{ width: 260 }}>
           <I.search size={15} />
@@ -68,7 +105,7 @@ export default function AgentsPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <button className="icon-btn" title="Refresh"><I.refresh size={16} /></button>
+        <button className="icon-btn" title="Refresh" onClick={refresh} disabled={loading}><I.refresh size={16} /></button>
         <button className="btn primary sm"><I.activity size={14} />New run</button>
       </div>
 
@@ -107,7 +144,7 @@ export default function AgentsPage() {
 
 function AgentCard({ s, now }: { s: Session; now: number }) {
   const router = useRouter();
-  const h = HARNESSES[s.harness];
+  const h = HARNESSES[s.harness] ?? HARNESSES["custom"];
   const live = s.status === "running";
   const dur = live ? now - s.startedAt : s.duration;
   const pctTimeout = s.timeout ? Math.min(100, (dur / 1000 / s.timeout) * 100) : null;

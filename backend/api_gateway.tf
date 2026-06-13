@@ -58,3 +58,87 @@ resource "aws_apigatewayv2_route" "get_file_content" {
   route_key = "POST /repos/{repoId}/file"
   target    = "integrations/${aws_apigatewayv2_integration.get_file_content.id}"
 }
+
+# ── Session integrations ───────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "session_start" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.session_start.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "session_end" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.session_end.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "sessions_list" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sessions_list.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "session_get" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.session_get.invoke_arn
+  payload_format_version = "2.0"
+}
+
+# ── Session routes ─────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_route" "session_start" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /sessions/start"
+  target    = "integrations/${aws_apigatewayv2_integration.session_start.id}"
+}
+
+resource "aws_apigatewayv2_route" "session_end" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /sessions/end"
+  target    = "integrations/${aws_apigatewayv2_integration.session_end.id}"
+}
+
+resource "aws_apigatewayv2_route" "sessions_list" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /sessions/list"
+  target    = "integrations/${aws_apigatewayv2_integration.sessions_list.id}"
+}
+
+resource "aws_apigatewayv2_route" "session_get" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /sessions/get"
+  target    = "integrations/${aws_apigatewayv2_integration.session_get.id}"
+}
+
+# ── Auth routes ────────────────────────────────────────────────────────────────
+
+resource "aws_apigatewayv2_integration" "auth_login" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.auth_login.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "auth_register" {
+  api_id                 = aws_apigatewayv2_api.mint_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.auth_register.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "auth_login" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /auth/login"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_login.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_register" {
+  api_id    = aws_apigatewayv2_api.mint_api.id
+  route_key = "POST /auth/register"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_register.id}"
+}

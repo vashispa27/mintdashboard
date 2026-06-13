@@ -3,3 +3,9 @@ variable "aws_region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "jwt_secret" {
+  description = "Secret key for signing JWTs — set in terraform.tfvars, never commit"
+  type        = string
+  sensitive   = true
+}

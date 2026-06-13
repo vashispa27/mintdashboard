@@ -6,9 +6,7 @@ import { I } from "@/components/sentinel/icons";
 import { HarnessMark, HarnessBadge, StatusPill, CopyMono } from "@/components/sentinel/shared";
 import { JsonlViewer } from "@/components/sentinel/jsonl-viewer";
 import {
-  getSession,
   LOG_TEMPLATES,
-  NOW,
   fmtDur,
   fmtAgo,
   fmtClock,
@@ -16,6 +14,8 @@ import {
   type Session,
   type LogTemplate,
 } from "@/lib/agents-data";
+import { fetchSession } from "@/lib/api";
+import { getIoTClient, sessionTopic } from "@/lib/iot";
 
 interface LogLineData extends LogTemplate {
   id: number;
@@ -25,8 +25,43 @@ interface LogLineData extends LogTemplate {
 export default function SessionPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const session = getSession(params.id);
+  const [session, setSession] = useState<Session | undefined>();
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"logs" | "jsonl">("logs");
+  const [iotConnected, setIotConnected] = useState(false);
+
+  useEffect(() => {
+    fetchSession(params.id).then(setSession).finally(() => setLoading(false));
+  }, [params.id]);
+
+  // IoT: track connection state + patch session on updates
+  useEffect(() => {
+    if (!session) return;
+    let unsub = false;
+    getIoTClient().then((client) => {
+      if (unsub) return;
+      client.subscribe(sessionTopic(params.id));
+      setIotConnected(client.connected);
+      client.on("connect",    () => setIotConnected(true));
+      client.on("disconnect", () => setIotConnected(false));
+      client.on("message", (_topic, payload) => {
+        try {
+          const msg = JSON.parse(payload.toString());
+          if (msg.sessionId !== params.id) return;
+          if (msg.type === "session.update" || msg.type === "session.metrics") {
+            setSession((s) => s ? { ...s, ...msg } : s);
+          }
+        } catch { /* ignore */ }
+      });
+    });
+    return () => { unsub = true; };
+  }, [params.id, session]);
+
+  if (loading) return (
+    <div className="main">
+      <div className="empty"><I.refresh size={26} />Loading…</div>
+    </div>
+  );
 
   if (!session) {
     return (
@@ -72,14 +107,14 @@ export default function SessionPage() {
           <div className="tabs">
             <button className={"tab" + (tab === "logs" ? " on" : "")} onClick={() => setTab("logs")}>
               <I.terminal size={15} />Live logs
-              {running && <span className="live-tag"><span className="dot running"></span>live</span>}
+              {running && iotConnected && <span className="live-tag"><span className="dot running"></span>live</span>}
             </button>
             <button className={"tab" + (tab === "jsonl" ? " on" : "")} onClick={() => setTab("jsonl")}>
               <I.code size={15} />JSONL transcript
               {running && <span className="tab-lock"><I.lock size={11} /></span>}
             </button>
           </div>
-          {tab === "logs" ? <LiveLogs session={session} /> : <JsonlViewer session={session} />}
+          {tab === "logs" ? <LiveLogs session={session} iotConnected={iotConnected} /> : <JsonlViewer session={session} />}
         </div>
 
         <MetricsRail session={session} />
@@ -89,7 +124,7 @@ export default function SessionPage() {
 }
 
 /* ---------- live streaming log panel ---------- */
-function LiveLogs({ session }: { session: Session }) {
+function LiveLogs({ session, iotConnected }: { session: Session; iotConnected: boolean }) {
   const running = session.status === "running";
   const [dark, setDark] = useState(false);
   const [lines, setLines] = useState<LogLineData[]>([]);
@@ -98,31 +133,35 @@ function LiveLogs({ session }: { session: Session }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(0);
 
-  // read persisted theme + seed initial lines after mount (SSR-safe)
   useEffect(() => {
     setDark(localStorage.getItem("logTheme") === "dark");
-    const n = session.status === "queued" ? 0 : 10;
-    const base = Date.now() - n * 1400;
-    const seed: LogLineData[] = [];
-    for (let i = 0; i < n; i++) seed.push({ id: i, ...LOG_TEMPLATES[i % LOG_TEMPLATES.length], at: base + i * 1400 });
-    idRef.current = n;
-    setLines(seed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     localStorage.setItem("logTheme", dark ? "dark" : "light");
   }, [dark]);
 
-  // stream new lines for running sessions
+  // stream live log lines from IoT
   useEffect(() => {
     if (!running || paused) return;
-    const t = setInterval(() => {
-      const tpl = LOG_TEMPLATES[Math.floor(Math.random() * LOG_TEMPLATES.length)];
-      setLines((prev) => [...prev.slice(-400), { id: idRef.current++, ...tpl, at: Date.now() }]);
-    }, 1100 + Math.random() * 900);
-    return () => clearInterval(t);
-  }, [running, paused]);
+    let unsub = false;
+    getIoTClient().then((client) => {
+      if (unsub) return;
+      client.subscribe(sessionTopic(session.id));
+      const handler = (_topic: string, payload: Buffer) => {
+        try {
+          const msg = JSON.parse(payload.toString());
+          console.log("[IoT log handler]", msg);
+          if (msg.sessionId !== session.id || msg.type !== "session.log") return;
+          const line = msg.line as LogTemplate;
+          setLines((prev) => [...prev.slice(-400), { id: idRef.current++, ...line, at: msg.ts ?? Date.now() }]);
+        } catch { /* ignore */ }
+      };
+      client.on("message", handler);
+      return () => client.off("message", handler);
+    });
+    return () => { unsub = true; };
+  }, [running, paused, session.id]);
 
   useEffect(() => {
     if (autoscroll && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
@@ -156,8 +195,11 @@ function LiveLogs({ session }: { session: Session }) {
       </div>
 
       <div className="logs-body mono" ref={bodyRef} onScroll={onScroll}>
+        {running && !iotConnected && lines.length === 0 && (
+          <div className="log-end" style={{ color: "var(--text-3)" }}>Connecting to live stream…</div>
+        )}
         {lines.map((l) => <LogLine key={l.id} l={l} />)}
-        {running && !paused && <div className="log-cursor"><span className="caret"></span></div>}
+        {running && iotConnected && !paused && <div className="log-cursor"><span className="caret"></span></div>}
         {!running && <div className="log-end">— end of stream · exit {session.exitCode} —</div>}
       </div>
 
@@ -195,11 +237,10 @@ function LogLine({ l }: { l: LogLineData }) {
 /* ---------- right metrics rail ---------- */
 function MetricsRail({ session }: { session: Session }) {
   const s = session;
-  const [now, setNow] = useState(NOW);
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (s.status !== "running") return;
-    const mounted = Date.now();
-    const t = setInterval(() => setNow(NOW + (Date.now() - mounted)), 1500);
+    const t = setInterval(() => setNow(Date.now()), 1500);
     return () => clearInterval(t);
   }, [s.status]);
 

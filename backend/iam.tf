@@ -24,7 +24,7 @@ resource "aws_iam_role_policy" "s3_access" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["s3:ListBucket", "s3:GetObject"]
+      Action   = ["s3:ListBucket", "s3:GetObject", "s3:PutObject"]
       Resource = "*"
     }]
   })
@@ -38,7 +38,7 @@ resource "aws_iam_role_policy" "dynamodb_access" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
+      Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:DeleteItem"]
       Resource = [aws_dynamodb_table.sessions.arn, aws_dynamodb_table.users.arn]
     }]
   })

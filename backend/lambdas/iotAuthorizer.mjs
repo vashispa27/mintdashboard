@@ -1,27 +1,63 @@
-import crypto from "crypto";
+import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
+import { createHash } from "crypto";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const db = new DynamoDBClient({});
+const USERS_TABLE = process.env.USERS_TABLE ?? "";
 
-function verifyJWT(token) {
-  try {
-    const [header, body, sig] = token.split(".");
-    const expected = crypto.createHmac("sha256", JWT_SECRET).update(`${header}.${body}`).digest("base64url");
-    if (sig !== expected) return null;
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
-    if (payload.exp && payload.exp < Date.now() / 1000) return null;
-    return payload;
-  } catch {
-    return null;
-  }
+// token format: sentinel_{8hexId}_{userId}_{64hexRandom}
+function parseToken(token) {
+  if (!token.startsWith("sentinel_")) return null;
+  const after = token.slice("sentinel_".length);
+  const keyId = after.slice(0, 8);
+  const rest = after.slice(9);
+  const lastUnderscore = rest.lastIndexOf("_");
+  if (lastUnderscore === -1) return null;
+  const userId = rest.slice(0, lastUnderscore);
+  if (!userId || !keyId) return null;
+  return { userId, keyId };
+}
+
+async function verifyApiKey(token) {
+  const parsed = parseToken(token);
+  if (!parsed) return null;
+  const { userId, keyId } = parsed;
+
+  const result = await db.send(new GetItemCommand({
+    TableName: USERS_TABLE,
+    Key: { userId: { S: userId } },
+  }));
+  if (!result.Item) return null;
+
+  const user = unmarshall(result.Item);
+  const keyRecord = user.apiKeys?.[keyId];
+  if (!keyRecord) return null;
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  if (tokenHash !== keyRecord.keyHash) return null;
+
+  return userId;
 }
 
 export const handler = async (event) => {
-  const token   = event.token;
-  const payload = verifyJWT(token);
+  const token = event.token ?? "";
 
-  if (!payload) return { isAuthenticated: false };
+  let userId = null;
+  try {
+    userId = await verifyApiKey(token);
+  } catch (err) {
+    console.error("[iotAuthorizer]", err);
+  }
 
-  const { userId } = payload;
+  if (!userId) {
+    return {
+      isAuthenticated: false,
+      principalId: "unknown",
+      disconnectAfterInSeconds: 0,
+      refreshAfterInSeconds: 300,
+      policyDocuments: [],
+    };
+  }
 
   return {
     isAuthenticated: true,

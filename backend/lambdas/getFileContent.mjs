@@ -17,7 +17,8 @@ const HEADERS = {
 };
 
 export const handler = async (event) => {
-  const { userId, path: filePath } = JSON.parse(event.body ?? "{}");
+  const userId = event.requestContext?.authorizer?.lambda?.userId;
+  const { path: filePath } = JSON.parse(event.body ?? "{}");
   const repoId = event.pathParameters?.repoId;
 
   if (!userId || !repoId || !filePath) {

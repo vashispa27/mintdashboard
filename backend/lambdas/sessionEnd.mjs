@@ -11,8 +11,8 @@ const HEADERS = {
 
 export const handler = async (event) => {
   try {
-    const body = JSON.parse(event.body ?? "{}");
-    const { userId, sessionId, status, exitCode } = body;
+    const userId = event.requestContext?.authorizer?.lambda?.userId;
+    const { sessionId, status, exitCode } = JSON.parse(event.body ?? "{}");
 
     if (!userId || !sessionId || !status) {
       return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "userId, sessionId, status required" }) };

@@ -9,7 +9,7 @@ const HEADERS = {
 
 export const handler = async (event) => {
   try {
-    const bucket = JSON.parse(event.body ?? "{}").userId;
+    const bucket = event.requestContext?.authorizer?.lambda?.userId;
 
     if (!bucket) {
       return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "Missing userId" }) };
@@ -20,10 +20,13 @@ export const handler = async (event) => {
       Delimiter: "/",
     }));
 
-    const repos = (res.CommonPrefixes ?? []).map((p) => {
-      const name = p.Prefix.replace(/\/$/, "");
-      return { id: name, name };
-    });
+    const HIDDEN = new Set(["sessions"]);
+    const repos = (res.CommonPrefixes ?? [])
+      .map((p) => {
+        const name = p.Prefix.replace(/\/$/, "");
+        return { id: name, name };
+      })
+      .filter((r) => !HIDDEN.has(r.name));
 
     return {
       statusCode: 200,

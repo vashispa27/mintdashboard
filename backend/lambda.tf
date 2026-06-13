@@ -86,6 +86,9 @@ locals {
     USERS_TABLE = aws_dynamodb_table.users.name
     JWT_SECRET  = var.jwt_secret
   }
+  keys_env = {
+    USERS_TABLE = aws_dynamodb_table.users.name
+  }
 }
 
 resource "aws_lambda_function" "session_start" {
@@ -210,7 +213,93 @@ resource "aws_lambda_function" "iot_authorizer" {
   timeout          = local.lambda_common.timeout
   memory_size      = local.lambda_common.memory_size
   architectures    = local.lambda_common.architectures
-  environment { variables = { JWT_SECRET = var.jwt_secret } }
+  environment { variables = local.keys_env }
+}
+
+# ── API key authorizer + management lambdas ────────────────────────────────────
+
+resource "aws_lambda_function" "api_authorizer" {
+  function_name    = "mint-apiAuthorizer"
+  handler          = "apiAuthorizer.handler"
+  filename         = local.lambda_common.filename
+  source_code_hash = local.lambda_common.source_code_hash
+  runtime          = local.lambda_common.runtime
+  role             = local.lambda_common.role
+  timeout          = local.lambda_common.timeout
+  memory_size      = local.lambda_common.memory_size
+  architectures    = local.lambda_common.architectures
+  environment { variables = local.keys_env }
+}
+
+resource "aws_lambda_permission" "api_authorizer" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api_authorizer.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "create_api_key" {
+  function_name    = "mint-createApiKey"
+  handler          = "createApiKey.handler"
+  filename         = local.lambda_common.filename
+  source_code_hash = local.lambda_common.source_code_hash
+  runtime          = local.lambda_common.runtime
+  role             = local.lambda_common.role
+  timeout          = local.lambda_common.timeout
+  memory_size      = local.lambda_common.memory_size
+  architectures    = local.lambda_common.architectures
+  environment { variables = local.keys_env }
+}
+
+resource "aws_lambda_function" "list_api_keys" {
+  function_name    = "mint-listApiKeys"
+  handler          = "listApiKeys.handler"
+  filename         = local.lambda_common.filename
+  source_code_hash = local.lambda_common.source_code_hash
+  runtime          = local.lambda_common.runtime
+  role             = local.lambda_common.role
+  timeout          = local.lambda_common.timeout
+  memory_size      = local.lambda_common.memory_size
+  architectures    = local.lambda_common.architectures
+  environment { variables = local.keys_env }
+}
+
+resource "aws_lambda_function" "revoke_api_key" {
+  function_name    = "mint-revokeApiKey"
+  handler          = "revokeApiKey.handler"
+  filename         = local.lambda_common.filename
+  source_code_hash = local.lambda_common.source_code_hash
+  runtime          = local.lambda_common.runtime
+  role             = local.lambda_common.role
+  timeout          = local.lambda_common.timeout
+  memory_size      = local.lambda_common.memory_size
+  architectures    = local.lambda_common.architectures
+  environment { variables = local.keys_env }
+}
+
+resource "aws_lambda_permission" "create_api_key" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.create_api_key.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "list_api_keys" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.list_api_keys.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "revoke_api_key" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.revoke_api_key.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
 }
 
 resource "aws_lambda_permission" "auth_login" {
@@ -225,6 +314,48 @@ resource "aws_lambda_permission" "auth_register" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.auth_register.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
+}
+
+# ── Transcript lambdas ─────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "get_session_transcript" {
+  function_name    = "mint-getSessionTranscript"
+  handler          = "getSessionTranscript.handler"
+  filename         = local.lambda_common.filename
+  source_code_hash = local.lambda_common.source_code_hash
+  runtime          = local.lambda_common.runtime
+  role             = local.lambda_common.role
+  timeout          = local.lambda_common.timeout
+  memory_size      = local.lambda_common.memory_size
+  architectures    = local.lambda_common.architectures
+}
+
+resource "aws_lambda_function" "put_session_transcript" {
+  function_name    = "mint-putSessionTranscript"
+  handler          = "putSessionTranscript.handler"
+  filename         = local.lambda_common.filename
+  source_code_hash = local.lambda_common.source_code_hash
+  runtime          = local.lambda_common.runtime
+  role             = local.lambda_common.role
+  timeout          = local.lambda_common.timeout
+  memory_size      = local.lambda_common.memory_size
+  architectures    = local.lambda_common.architectures
+}
+
+resource "aws_lambda_permission" "get_session_transcript" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_session_transcript.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "put_session_transcript" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.put_session_transcript.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.mint_api.execution_arn}/*/*"
 }

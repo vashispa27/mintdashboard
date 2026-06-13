@@ -11,7 +11,7 @@ const HEADERS = {
 
 export const handler = async (event) => {
   try {
-    const { userId } = JSON.parse(event.body ?? "{}");
+    const userId = event.requestContext?.authorizer?.lambda?.userId;
 
     if (!userId) {
       return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "userId required" }) };

@@ -1,7 +1,7 @@
 import type { MqttClient } from "mqtt";
 
 const IOT_ENDPOINT = process.env.NEXT_PUBLIC_IOT_ENDPOINT ?? "";
-const TOKEN        = process.env.NEXT_PUBLIC_SENTINEL_TOKEN ?? "";
+const API_KEY      = process.env.NEXT_PUBLIC_API_KEY ?? "";
 export const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "";
 
 export const allSessionsTopic = () => `users/${USER_ID}/sessions/#`;
@@ -21,7 +21,7 @@ export async function getIoTClient(): Promise<MqttClient> {
 
     const url = `wss://${IOT_ENDPOINT}/mqtt` +
       `?x-amz-customauthorizer-name=sentinel-jwt-authorizer` +
-      `&token=${encodeURIComponent(TOKEN)}`;
+      `&token=${encodeURIComponent(API_KEY)}`;
 
     // Dynamic import keeps mqtt out of the SSR bundle
     import("mqtt").then(({ default: mqtt }) => {

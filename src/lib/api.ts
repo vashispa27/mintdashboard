@@ -6,6 +6,7 @@ import { SESSIONS, type Session, type Status } from "@/lib/agents-data";
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID ?? "";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
 
 export interface RepoMeta {
   id: string;
@@ -22,8 +23,11 @@ function countFiles(nodes: FileNode[]): number {
 async function post<T>(path: string, body: object = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: USER_ID, ...body }),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${path} failed (${res.status})`);
   return res.json();
@@ -102,6 +106,35 @@ export async function fetchSession(sessionId: string): Promise<Session | undefin
   }
 }
 
+// ── API key management ─────────────────────────────────────────────────────────
+
+export interface ApiKey {
+  keyId: string;
+  name: string;
+  prefix: string;
+  createdAt: number;
+}
+
+export async function listApiKeys(): Promise<ApiKey[]> {
+  const data = await post<{ keys: ApiKey[] }>("/keys/list");
+  return data.keys;
+}
+
+export async function createApiKey(name: string): Promise<{ key: string; keyId: string; prefix: string; createdAt: number }> {
+  // /keys/create is unauthenticated — userId must be in body
+  const res = await fetch(`${API_URL}/keys/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: USER_ID, name }),
+  });
+  if (!res.ok) throw new Error(`/keys/create failed (${res.status})`);
+  return res.json();
+}
+
+export async function revokeApiKey(keyId: string): Promise<void> {
+  await post("/keys/revoke", { keyId });
+}
+
 // ── Node process helpers (called from agent harness, not the dashboard) ───────
 
 export async function sessionStart(params: {
@@ -117,6 +150,11 @@ export async function sessionStart(params: {
   memCap?: number;
 }): Promise<void> {
   await post("/sessions/start", params);
+}
+
+export async function fetchTranscript(sessionId: string): Promise<string> {
+  const data = await post<{ content: string }>("/sessions/transcript", { sessionId });
+  return data.content;
 }
 
 export async function sessionEnd(params: {

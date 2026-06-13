@@ -66,7 +66,7 @@ function buildTree(objects, prefix) {
 }
 
 export const handler = async (event) => {
-  const { userId } = JSON.parse(event.body ?? "{}");
+  const userId = event.requestContext?.authorizer?.lambda?.userId;
   const repoId = event.pathParameters?.repoId;
 
   if (!userId || !repoId) {

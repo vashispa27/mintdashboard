@@ -11,6 +11,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const onAgents = pathname === "/" || pathname.startsWith("/sessions");
   const onRepos = pathname.startsWith("/repos");
+  const onSettings = pathname.startsWith("/settings");
 
   return (
     <div className="app">
@@ -45,6 +46,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Link>
 
         <div className="nav-spacer"></div>
+
+        <Link href="/settings" className={"nav-item" + (onSettings ? " active" : "")}>
+          <I.settings size={17} />
+          <span>Settings</span>
+        </Link>
 
         <div className="nav-section">Account</div>
         <div className="nav-account">
